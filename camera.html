@@ -1,0 +1,269 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo Challenge Camera</title>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f0f7ff;
+    text-align: center;
+    padding: 30px 15px;
+    margin: 0;
+  }
+
+  .container {
+    max-width: 550px;
+    margin: 40px auto;
+    background: white;
+    padding: 30px 20px;
+    border-radius: 18px;
+    box-shadow: 0 5px 25px #0001;
+  }
+
+  h1 {
+    color: #2878d0;
+  }
+
+  button {
+    background: #2878d0;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 15px 25px;
+    font-size: 17px;
+    cursor: pointer;
+    margin: 10px;
+  }
+
+  button:hover {
+    background: #165ba8;
+  }
+
+  video, #photo {
+    width: 100%;
+    max-width: 450px;
+    border-radius: 12px;
+    margin: 20px auto;
+  }
+
+  #camera, #result {
+    display: none;
+  }
+
+  #error {
+    color: #c62828;
+    margin: 20px;
+    white-space: pre-wrap;
+  }
+
+  .congrats {
+    color: #159447;
+    font-size: 28px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>📸 Photo Challenge!</h1>
+
+  <p>Ready to take your photo?</p>
+
+  <div id="start">
+
+    <button onclick="startCamera()">
+      Open My Camera
+    </button>
+
+  </div>
+
+  <div id="error"></div>
+
+  <div id="camera">
+
+    <h2>Looking good! 😎</h2>
+
+    <video id="video" autoplay playsinline></video>
+
+    <br>
+
+    <button onclick="capturePhoto()">
+      📸 Capture Photo
+    </button>
+
+    <button onclick="stopCamera()" style="background:#777">
+      Cancel
+    </button>
+
+  </div>
+
+  <div id="result">
+
+    <h2 class="congrats">🎉 CONGRATULATIONS!</h2>
+
+    <p>Your photo has been sent!</p>
+
+    <img id="photo" alt="Your captured photo">
+
+  </div>
+
+  <canvas id="canvas" hidden></canvas>
+
+</div>
+
+<script>
+
+let stream = null;
+
+const video = document.getElementById("video");
+
+async function startCamera() {
+
+  document.getElementById("error").textContent = "";
+
+  try {
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+
+      throw new Error(
+        "Camera access is unavailable. Please use HTTPS and a modern browser."
+      );
+
+    }
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false
+    });
+
+    video.srcObject = stream;
+
+    await video.play();
+
+    document.getElementById("start").style.display = "none";
+
+    document.getElementById("camera").style.display = "block";
+
+  } catch (err) {
+
+    let message = "Could not open camera.\n";
+
+    if (err.name === "NotAllowedError") {
+
+      message += "Please allow camera access in your browser settings.";
+
+    } else if (err.name === "NotFoundError") {
+
+      message += "No camera was found on this device.";
+
+    } else if (err.name === "NotReadableError") {
+
+      message += "The camera may be in use by another application.";
+
+    } else {
+
+      message += err.message;
+
+    }
+
+    document.getElementById("error").textContent = message;
+
+  }
+
+}
+
+function capturePhoto() {
+
+  if (!stream || !video.videoWidth) {
+
+    document.getElementById("error").textContent =
+      "Camera is not ready. Please try again.";
+
+    return;
+
+  }
+
+  const canvas = document.getElementById("canvas");
+
+  canvas.width = video.videoWidth;
+
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(video, 0, 0);
+
+  // Convert the captured photo into JPEG data
+  const photoData = canvas.toDataURL("image/jpeg", 0.9);
+
+  // Display the photo in the camera window
+  document.getElementById("photo").src = photoData;
+
+  // Send the photo back to the parent window
+  if (window.opener && !window.opener.closed) {
+
+    window.opener.postMessage({
+
+      type: "photo-captured",
+
+      photo: photoData
+
+    }, location.origin);
+
+  } else {
+
+    document.getElementById("error").textContent =
+      "Could not find the original challenge page. Please reopen the camera from that page.";
+
+    stopCameraStream();
+
+    return;
+
+  }
+
+  stopCameraStream();
+
+  document.getElementById("camera").style.display = "none";
+
+  document.getElementById("start").style.display = "none";
+
+  document.getElementById("result").style.display = "block";
+
+}
+
+function stopCameraStream() {
+
+  if (stream) {
+
+    stream.getTracks().forEach(track => track.stop());
+
+    stream = null;
+
+  }
+
+  video.srcObject = null;
+
+}
+
+function stopCamera() {
+
+  stopCameraStream();
+
+  document.getElementById("camera").style.display = "none";
+
+  document.getElementById("start").style.display = "block";
+
+}
+
+window.addEventListener("pagehide", stopCameraStream);
+
+</script>
+
+</body>
+</html>
