@@ -17,14 +17,16 @@
 
   .container {
     max-width: 550px;
-    margin: 40px auto;
+    margin: 20px auto;
     background: white;
     padding: 30px 20px;
     border-radius: 18px;
     box-shadow: 0 5px 25px #0001;
   }
 
-  h1 { color: #2878d0; }
+  h1 {
+    color: #2878d0;
+  }
 
   button {
     background: #2878d0;
@@ -37,23 +39,21 @@
     margin: 10px;
   }
 
-  button:hover { background: #165ba8; }
+  button:hover {
+    background: #165ba8;
+  }
 
-  video, #photo {
+  #photo {
     width: 100%;
     max-width: 450px;
     border-radius: 12px;
     margin: 20px auto;
-  }
-
-  #camera, #result {
     display: none;
   }
 
-  #error {
-    color: #c62828;
+  #status {
     margin: 20px;
-    white-space: pre-wrap;
+    color: #2878d0;
   }
 
   .congrats {
@@ -68,146 +68,90 @@
 <div class="container">
 
   <h1>📸 Photo Challenge!</h1>
+
   <p>Ready to take your photo?</p>
 
-  <div id="start">
-    <button onclick="startCamera()">
-      Open My Camera
-    </button>
-  </div>
+  <button onclick="openCamera()">
+    Open My Camera 📷
+  </button>
 
-  <div id="error"></div>
+  <p id="status">Waiting for your photo...</p>
 
-  <div id="camera">
-    <h2>Looking good! 😎</h2>
-    <video id="video" autoplay playsinline></video>
-    <br>
-    <button onclick="capturePhoto()">
-      📸 Capture Photo
-    </button>
-    <button onclick="stopCamera()" style="background:#777">
-      Cancel
-    </button>
-  </div>
+  <div id="result" style="display:none">
 
-  <div id="result">
     <h2 class="congrats">🎉 CONGRATULATIONS!</h2>
+
     <p>You did it! Here's your photo!</p>
 
     <img id="photo" alt="Your captured photo">
 
     <br>
 
-    <button onclick="retakePhoto()">
+    <button onclick="openCamera()">
       Take Another Photo
     </button>
-  </div>
 
-  <canvas id="canvas" hidden></canvas>
+  </div>
 
 </div>
 
 <script>
 
-let stream = null;
+let cameraWindow = null;
 
-const video = document.getElementById("video");
+function openCamera() {
 
-async function startCamera() {
+  cameraWindow = window.open(
+    "camera.html",
+    "PhotoCamera",
+    "width=650,height=750"
+  );
 
-  document.getElementById("error").textContent = "";
+  if (!cameraWindow) {
 
-  try {
+    document.getElementById("status").textContent =
+      "Popup blocked! Please allow popups for this site.";
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error(
-        "Camera access is unavailable. Please use HTTPS and a modern browser."
-      );
-    }
+  } else {
 
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: false
-    });
-
-    video.srcObject = stream;
-    await video.play();
-
-    document.getElementById("start").style.display = "none";
-    document.getElementById("camera").style.display = "block";
-
-  } catch (err) {
-
-    let message = "Could not open camera.\n";
-
-    if (err.name === "NotAllowedError") {
-      message += "Please allow camera access in your browser settings.";
-    } else if (err.name === "NotFoundError") {
-      message += "No camera was found on this device.";
-    } else if (err.name === "NotReadableError") {
-      message += "The camera may be in use by another application.";
-    } else {
-      message += err.message;
-    }
-
-    document.getElementById("error").textContent = message;
+    document.getElementById("status").textContent =
+      "Camera opened! Take your photo.";
 
   }
+
 }
 
-function capturePhoto() {
+// Listen for the photo sent by camera.html
+window.addEventListener("message", function(event) {
 
-  if (!stream || !video.videoWidth) {
-    document.getElementById("error").textContent =
-      "Camera is not ready. Please try again.";
-    return;
+  // Security: only accept messages from our own GitHub Pages site
+  if (event.origin !== location.origin) return;
+
+  // Only accept messages from the window we opened
+  if (event.source !== cameraWindow) return;
+
+  if (event.data && event.data.type === "photo-captured") {
+
+    document.getElementById("photo").src =
+      event.data.photo;
+
+    document.getElementById("photo").style.display =
+      "block";
+
+    document.getElementById("result").style.display =
+      "block";
+
+    document.getElementById("status").textContent = "";
+
   }
 
-  const canvas = document.getElementById("canvas");
+});
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+</script>
 
-  const ctx = canvas.getContext("2d");
+</body>
+</html>
 
-  ctx.drawImage(video, 0, 0);
-
-  document.getElementById("photo").src =
-    canvas.toDataURL("image/jpeg", 0.9);
-
-  stopCameraStream();
-
-  document.getElementById("camera").style.display = "none";
-  document.getElementById("result").style.display = "block";
-}
-
-function stopCameraStream() {
-
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-    stream = null;
-  }
-
-  video.srcObject = null;
-}
-
-function stopCamera() {
-
-  stopCameraStream();
-
-  document.getElementById("camera").style.display = "none";
-  document.getElementById("start").style.display = "block";
-}
-
-function retakePhoto() {
-
-  document.getElementById("result").style.display = "none";
-  document.getElementById("start").style.display = "block";
-
-  startCamera();
-}
-
-window.addEventListener("pagehide", stopCameraStream);
 
 </script>
 
