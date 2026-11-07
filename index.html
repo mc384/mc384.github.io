@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EAB Photo Challenge</title>
-<!-- random comment >
+
 <!-- Leaflet map styles -->
 <link
   rel="stylesheet"
@@ -79,6 +79,27 @@
     color: #159447;
     font-size: 26px;
   }
+
+  #classification {
+    background: #f0f7ff;
+    border-radius: 12px;
+    padding: 18px;
+    margin: 20px auto;
+  }
+
+  #classification h3 {
+    margin-top: 0;
+  }
+
+  #classificationResult {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2878d0;
+  }
+
+  #confidence {
+    color: #555;
+  }
 </style>
 </head>
 
@@ -109,6 +130,19 @@
 
     <img id="photo" alt="Your submitted photo">
 
+    <!-- NEW: Classification result -->
+    <div id="classification">
+
+      <h3>🤖 Teachable Machine Analysis</h3>
+
+      <p id="classificationResult">
+        Waiting for analysis...
+      </p>
+
+      <p id="confidence"></p>
+
+    </div>
+
     <div id="coordinates">
       <strong>📍 Photo Location</strong>
       <p id="latitude"></p>
@@ -125,6 +159,11 @@
 
 <!-- Leaflet map library -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- NEW: Teachable Machine libraries -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.3/dist/teachablemachine-image.min.js"></script>
 
 <script>
 
@@ -149,7 +188,123 @@ let marker = null;
 
 
 // =====================================
-// 2. OPEN CAMERA WINDOW
+// 2. LOAD TEACHABLE MACHINE MODEL
+// =====================================
+
+const MODEL_URL =
+  "https://teachablemachine.withgoogle.com/models/vvNkMzRJM/";
+
+let model = null;
+
+// Load the model when the website opens
+const modelReady = tmImage.load(
+  MODEL_URL + "model.json",
+  MODEL_URL + "metadata.json"
+).then(function(loadedModel) {
+
+  model = loadedModel;
+
+  console.log("Teachable Machine model loaded!");
+
+}).catch(function(error) {
+
+  console.error("Model loading failed:", error);
+
+  throw error;
+
+});
+
+
+// =====================================
+// 3. CLASSIFY THE PHOTO
+// =====================================
+
+async function classifyPhoto(image) {
+
+  const resultText =
+    document.getElementById("classificationResult");
+
+  const confidenceText =
+    document.getElementById("confidence");
+
+  resultText.textContent = "Analyzing photo...";
+
+  confidenceText.textContent = "";
+
+  try {
+
+    // Wait for the model to load
+    await modelReady;
+
+    // Classify the actual photo
+    const predictions = await model.predict(image);
+
+    // Find the prediction with the highest probability
+    let bestPrediction = predictions[0];
+
+    for (let i = 1; i < predictions.length; i++) {
+
+      if (
+        predictions[i].probability >
+        bestPrediction.probability
+      ) {
+        bestPrediction = predictions[i];
+      }
+
+    }
+
+    const className = bestPrediction.className;
+
+    const confidence =
+      bestPrediction.probability * 100;
+
+    // Convert the class name to lowercase
+    const label = className.toLowerCase();
+
+    // Decide whether the result is EAB or Not EAB
+    if (
+      label.includes("not") ||
+      label.includes("non")
+    ) {
+
+      resultText.textContent = "❌ Not EAB";
+
+    } else if (label.includes("eab")) {
+
+      resultText.textContent = "🐞 EAB";
+
+    } else {
+
+      // If the class names do not match our expected names,
+      // show the original model prediction instead.
+      resultText.textContent =
+        "Model result: " + className;
+
+    }
+
+    confidenceText.textContent =
+      "Model confidence: " +
+      confidence.toFixed(1) + "%";
+
+    console.log("All predictions:", predictions);
+
+  } catch (error) {
+
+    console.error("Classification failed:", error);
+
+    resultText.textContent =
+      "Could not classify this photo.";
+
+    confidenceText.textContent =
+      "Please try taking another photo.";
+
+  }
+
+}
+
+
+// =====================================
+// 4. OPEN CAMERA WINDOW
 // =====================================
 
 let cameraWindow = null;
@@ -178,7 +333,7 @@ function openCamera() {
 
 
 // =====================================
-// 3. RECEIVE PHOTO AND COORDINATES
+// 5. RECEIVE PHOTO AND COORDINATES
 // =====================================
 
 window.addEventListener("message", function(event) {
@@ -194,11 +349,27 @@ window.addEventListener("message", function(event) {
 
 
   // Display photo
-  document.getElementById("photo").src = data.photo;
-
-  document.getElementById("photo").style.display = "block";
+  const photoElement = document.getElementById("photo");
 
   document.getElementById("result").style.display = "block";
+
+  photoElement.style.display = "block";
+
+  // Reset classification display
+  document.getElementById("classificationResult").textContent =
+    "Analyzing photo...";
+
+  document.getElementById("confidence").textContent = "";
+
+
+  // Classify the photo after the image has loaded
+  photoElement.onload = function() {
+
+    classifyPhoto(photoElement);
+
+  };
+
+  photoElement.src = data.photo;
 
 
   // Display coordinates
@@ -251,11 +422,16 @@ window.addEventListener("message", function(event) {
 });
 
 
-// Fix map sizing when embedded
+// =====================================
+// 6. FIX MAP SIZING
+// =====================================
+
 window.addEventListener("load", function() {
+
   setTimeout(function() {
     map.invalidateSize();
   }, 500);
+
 });
 
 </script>
