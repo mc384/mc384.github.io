@@ -4,29 +4,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Photo Challenge!</title>
+<title>EAB Photo Challenge</title>
+
+<!-- Leaflet map styles -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
 
 <style>
   body {
     font-family: Arial, sans-serif;
     background: #f0f7ff;
     text-align: center;
-    padding: 30px 15px;
+    padding: 20px 10px;
     margin: 0;
   }
 
   .container {
-    max-width: 550px;
+    max-width: 650px;
     margin: 20px auto;
     background: white;
-    padding: 30px 20px;
+    padding: 25px 15px;
     border-radius: 18px;
     box-shadow: 0 5px 25px #0001;
   }
 
-  h1 {
-    color: #2878d0;
-  }
+  h1 { color: #2878d0; }
 
   button {
     background: #2878d0;
@@ -43,6 +47,14 @@
     background: #165ba8;
   }
 
+  #map {
+    width: 100%;
+    height: 400px;
+    border-radius: 12px;
+    margin: 20px auto;
+    z-index: 1;
+  }
+
   #photo {
     width: 100%;
     max-width: 450px;
@@ -51,14 +63,21 @@
     display: none;
   }
 
+  #coordinates {
+    background: #f0f7ff;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 15px auto;
+    word-break: break-word;
+  }
+
   #status {
-    margin: 20px;
     color: #2878d0;
   }
 
   .congrats {
     color: #159447;
-    font-size: 28px;
+    font-size: 26px;
   }
 </style>
 </head>
@@ -67,25 +86,34 @@
 
 <div class="container">
 
-  <h1>📸 Photo Challenge!</h1>
+  <h1>🌳 EAB Photo Challenge!</h1>
 
-  <p>Ready to take your photo?</p>
+  <p>Help us track potential Emerald Ash Borer sightings!</p>
+
+  <h2>📍 Ontario Sightings Map</h2>
+
+  <p>Take a photo to add a location marker to the map.</p>
+
+  <!-- Map is visible immediately -->
+  <div id="map"></div>
 
   <button onclick="openCamera()">
-    Open My Camera 📷
+    📸 Open My Camera
   </button>
 
   <p id="status">Waiting for your photo...</p>
 
   <div id="result" style="display:none">
 
-    <h2 class="congrats">🎉 CONGRATULATIONS!</h2>
+    <h2 class="congrats">🎉 Photo Received!</h2>
 
-    <p>You did it! Here's your photo!</p>
+    <img id="photo" alt="Your submitted photo">
 
-    <img id="photo" alt="Your captured photo">
-
-    <br>
+    <div id="coordinates">
+      <strong>📍 Photo Location</strong>
+      <p id="latitude"></p>
+      <p id="longitude"></p>
+    </div>
 
     <button onclick="openCamera()">
       Take Another Photo
@@ -95,7 +123,34 @@
 
 </div>
 
+<!-- Leaflet map library -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
+
+// =====================================
+// 1. CREATE ONTARIO MAP
+// =====================================
+
+// Approximate center of Ontario
+const map = L.map("map").setView([50.0, -85.0], 5);
+
+// Add OpenStreetMap tiles
+L.tileLayer(
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19
+  }
+).addTo(map);
+
+// Store the marker
+let marker = null;
+
+
+// =====================================
+// 2. OPEN CAMERA WINDOW
+// =====================================
 
 let cameraWindow = null;
 
@@ -110,7 +165,7 @@ function openCamera() {
   if (!cameraWindow) {
 
     document.getElementById("status").textContent =
-      "Popup blocked! Please allow popups for this site.";
+      "Popup blocked! Please allow popups.";
 
   } else {
 
@@ -121,37 +176,87 @@ function openCamera() {
 
 }
 
-// Listen for the photo sent by camera.html
+
+// =====================================
+// 3. RECEIVE PHOTO AND COORDINATES
+// =====================================
+
 window.addEventListener("message", function(event) {
 
-  // Security: only accept messages from our own GitHub Pages site
+  // Security check
   if (event.origin !== location.origin) return;
 
-  // Only accept messages from the window we opened
   if (event.source !== cameraWindow) return;
 
-  if (event.data && event.data.type === "photo-captured") {
+  const data = event.data;
 
-    document.getElementById("photo").src =
-      event.data.photo;
+  if (!data || data.type !== "photo-captured") return;
 
-    document.getElementById("photo").style.display =
-      "block";
 
-    document.getElementById("result").style.display =
-      "block";
+  // Display photo
+  document.getElementById("photo").src = data.photo;
 
-    document.getElementById("status").textContent = "";
+  document.getElementById("photo").style.display = "block";
+
+  document.getElementById("result").style.display = "block";
+
+
+  // Display coordinates
+  if (data.latitude !== null && data.longitude !== null) {
+
+    const lat = data.latitude;
+    const lng = data.longitude;
+
+    document.getElementById("latitude").textContent =
+      "Latitude: " + lat.toFixed(6);
+
+    document.getElementById("longitude").textContent =
+      "Longitude: " + lng.toFixed(6);
+
+
+    // Remove previous marker
+    if (marker) {
+      map.removeLayer(marker);
+    }
+
+    // Add new marker
+    marker = L.marker([lat, lng]).addTo(map);
+
+    marker.bindPopup(
+      "📸 EAB Photo Location<br>" +
+      "Latitude: " + lat.toFixed(6) + "<br>" +
+      "Longitude: " + lng.toFixed(6)
+    ).openPopup();
+
+    // Zoom to photo location
+    map.setView([lat, lng], 13);
+
+  } else {
+
+    document.getElementById("latitude").textContent =
+      "Location unavailable.";
+
+    document.getElementById("longitude").textContent = "";
 
   }
 
+  document.getElementById("status").textContent =
+    "Photo successfully received!";
+
+  // Ensure map renders correctly inside Google Sites
+  setTimeout(function() {
+    map.invalidateSize();
+  }, 200);
+
 });
 
-</script>
 
-</body>
-</html>
-
+// Fix map sizing when embedded
+window.addEventListener("load", function() {
+  setTimeout(function() {
+    map.invalidateSize();
+  }, 500);
+});
 
 </script>
 
