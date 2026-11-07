@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Photo Challenge Camera</title>
+<title>EAB Photo Camera</title>
 
 <style>
   body {
@@ -24,9 +24,7 @@
     box-shadow: 0 5px 25px #0001;
   }
 
-  h1 {
-    color: #2878d0;
-  }
+  h1 { color: #2878d0; }
 
   button {
     background: #2878d0;
@@ -37,10 +35,6 @@
     font-size: 17px;
     cursor: pointer;
     margin: 10px;
-  }
-
-  button:hover {
-    background: #165ba8;
   }
 
   video, #photo {
@@ -71,7 +65,7 @@
 
 <div class="container">
 
-  <h1>📸 Photo Challenge!</h1>
+  <h1>📸 EAB Photo Challenge!</h1>
 
   <p>Ready to take your photo?</p>
 
@@ -93,7 +87,7 @@
 
     <br>
 
-    <button onclick="capturePhoto()">
+    <button id="captureButton" onclick="capturePhoto()">
       📸 Capture Photo
     </button>
 
@@ -107,7 +101,7 @@
 
     <h2 class="congrats">🎉 CONGRATULATIONS!</h2>
 
-    <p>Your photo has been sent!</p>
+    <p>Your photo and location have been sent!</p>
 
     <img id="photo" alt="Your captured photo">
 
@@ -123,6 +117,11 @@ let stream = null;
 
 const video = document.getElementById("video");
 
+
+// =====================================
+// 1. START CAMERA (PREFER REAR CAMERA)
+// =====================================
+
 async function startCamera() {
 
   document.getElementById("error").textContent = "";
@@ -132,14 +131,19 @@ async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
 
       throw new Error(
-        "Camera access is unavailable. Please use HTTPS and a modern browser."
+        "Camera access requires HTTPS and a modern browser."
       );
 
     }
 
     stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
+
+      video: {
+        facingMode: { ideal: "environment" }
+      },
+
       audio: false
+
     });
 
     video.srcObject = stream;
@@ -156,15 +160,11 @@ async function startCamera() {
 
     if (err.name === "NotAllowedError") {
 
-      message += "Please allow camera access in your browser settings.";
+      message += "Please allow camera access.";
 
     } else if (err.name === "NotFoundError") {
 
-      message += "No camera was found on this device.";
-
-    } else if (err.name === "NotReadableError") {
-
-      message += "The camera may be in use by another application.";
+      message += "No camera was found.";
 
     } else {
 
@@ -178,16 +178,27 @@ async function startCamera() {
 
 }
 
-function capturePhoto() {
+
+// =====================================
+// 2. CAPTURE PHOTO AND GET LOCATION
+// =====================================
+
+async function capturePhoto() {
 
   if (!stream || !video.videoWidth) {
 
     document.getElementById("error").textContent =
-      "Camera is not ready. Please try again.";
+      "Camera is not ready.";
 
     return;
 
   }
+
+  const captureButton = document.getElementById("captureButton");
+
+  captureButton.disabled = true;
+
+  captureButton.textContent = "Getting location...";
 
   const canvas = document.getElementById("canvas");
 
@@ -199,33 +210,57 @@ function capturePhoto() {
 
   ctx.drawImage(video, 0, 0);
 
-  // Convert the captured photo into JPEG data
+  // Convert photo to JPEG
   const photoData = canvas.toDataURL("image/jpeg", 0.9);
 
-  // Display the photo in the camera window
-  document.getElementById("photo").src = photoData;
+  // Get GPS coordinates
+  let latitude = null;
+  let longitude = null;
 
-  // Send the photo back to the parent window
+  try {
+
+    const position = await getLocation();
+
+    latitude = position.coords.latitude;
+
+    longitude = position.coords.longitude;
+
+  } catch (err) {
+
+    document.getElementById("error").textContent =
+      "Could not get location: " + err.message +
+      "\nYour photo will still be sent without coordinates.";
+
+  }
+
+  // Send everything back to index.html
   if (window.opener && !window.opener.closed) {
 
     window.opener.postMessage({
 
       type: "photo-captured",
 
-      photo: photoData
+      photo: photoData,
+
+      latitude: latitude,
+
+      longitude: longitude
 
     }, location.origin);
 
   } else {
 
     document.getElementById("error").textContent =
-      "Could not find the original challenge page. Please reopen the camera from that page.";
+      "Could not find the original website. Please reopen the camera.";
 
     stopCameraStream();
 
     return;
 
   }
+
+  // Display photo locally
+  document.getElementById("photo").src = photoData;
 
   stopCameraStream();
 
@@ -236,6 +271,46 @@ function capturePhoto() {
   document.getElementById("result").style.display = "block";
 
 }
+
+
+// =====================================
+// 3. GET PHONE LOCATION
+// =====================================
+
+function getLocation() {
+
+  return new Promise(function(resolve, reject) {
+
+    if (!navigator.geolocation) {
+
+      reject(new Error("Geolocation is not supported."));
+
+      return;
+
+    }
+
+    navigator.geolocation.getCurrentPosition(
+
+      resolve,
+
+      reject,
+
+      {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0
+      }
+
+    );
+
+  });
+
+}
+
+
+// =====================================
+// 4. STOP CAMERA
+// =====================================
 
 function stopCameraStream() {
 
@@ -251,6 +326,7 @@ function stopCameraStream() {
 
 }
 
+
 function stopCamera() {
 
   stopCameraStream();
@@ -259,7 +335,10 @@ function stopCamera() {
 
   document.getElementById("start").style.display = "block";
 
+  document.getElementById("error").textContent = "";
+
 }
+
 
 window.addEventListener("pagehide", stopCameraStream);
 
